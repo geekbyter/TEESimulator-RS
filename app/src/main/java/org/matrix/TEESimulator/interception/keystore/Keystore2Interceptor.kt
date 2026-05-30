@@ -339,11 +339,13 @@ object Keystore2Interceptor : AbstractKeystoreInterceptor() {
                     ?: return TransactionResult.ContinueAndSkipPost
             val granteeUid = data.readInt()
             val accessVector = data.readInt()
-            // Only synthetic keys are ours; real keys fall through to the real keystore2, which
-            // applies the same SELinux gate the platform would.
+            // Synthetic (generatedKeys) AND patch-mode (teeResponses) keys are ours; both must grant
+            // coherently so the Domain.GRANT readback returns the same chain the owner read returns.
+            // Real hardware keys fall through to the real keystore2, which applies the same SELinux
+            // gate the platform would.
             val ownerKeyId =
                 resolveOwnerKeyId(key, callingUid)
-                    ?.takeIf { KeyMintSecurityLevelInterceptor.generatedKeys.containsKey(it) }
+                    ?.takeIf { KeyMintSecurityLevelInterceptor.ownsKeyResponse(it) }
                     ?: return TransactionResult.ContinueAndSkipPost
             // Version-gated to mirror the real TEE 1:1. Pre-Android-16, grant was a hidden API and
             // SELinux denied untrusted_app, so keystore2 returns PERMISSION_DENIED. Android 16
@@ -372,7 +374,7 @@ object Keystore2Interceptor : AbstractKeystoreInterceptor() {
             val granteeUid = data.readInt()
             val ownerKeyId =
                 resolveOwnerKeyId(key, callingUid)
-                    ?.takeIf { KeyMintSecurityLevelInterceptor.generatedKeys.containsKey(it) }
+                    ?.takeIf { KeyMintSecurityLevelInterceptor.ownsKeyResponse(it) }
                     ?: return TransactionResult.ContinueAndSkipPost
             // Same version gate as grant(): denied pre-36, revoke the virtualized grant on 36+.
             if (Build.VERSION.SDK_INT < GRANT_PUBLIC_API_SDK) {

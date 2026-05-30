@@ -1220,8 +1220,18 @@ class KeyMintSecurityLevelInterceptor(
         /** Caller-bound resolve: only the designated grantee, only while the key exists. */
         fun resolveGrant(grantId: Long, callerUid: Int): SoftwareGrant? =
             softwareGrants[grantId]?.takeIf {
-                it.granteeUid == callerUid && generatedKeys.containsKey(it.ownerKeyId)
+                it.granteeUid == callerUid && ownsKeyResponse(it.ownerKeyId)
             }
+
+        /**
+         * True when this interceptor holds a coherent [KeyEntryResponse] for [keyId] — synthetic
+         * (`generatedKeys`) OR patch-mode (`teeResponses`, a real TEE key whose attestation we
+         * patched). The grant plane must virtualize both: gating on `generatedKeys` alone left
+         * patch-mode keys' `Domain.GRANT` readback falling through to the real keystore2 unpatched,
+         * splitting the grant chain against the owner's patched read (duck SELF_/ISOLATED_CHAIN_SPLIT,
+         * surfaced once Android 16 made KeyStoreManager.grantKeyAccess a public API).
+         */
+        fun ownsKeyResponse(keyId: KeyIdentifier): Boolean = getGeneratedKeyResponse(keyId) != null
 
         fun revokeGrant(ownerKeyId: KeyIdentifier, granteeUid: Int) {
             softwareGrants.entries
