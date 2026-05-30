@@ -1359,14 +1359,13 @@ private fun KeyMintAttestation.toAuthorizations(
     if (osPatch != AndroidDeviceUtils.DO_NOT_REPORT) {
         authList.add(createAuth(Tag.OS_PATCHLEVEL, KeyParameterValue.integer(osPatch)))
     }
-    val vendorPatch = AndroidDeviceUtils.getVendorPatchLevelLong(callingUid)
-    if (vendorPatch != AndroidDeviceUtils.DO_NOT_REPORT) {
-        authList.add(createAuth(Tag.VENDOR_PATCHLEVEL, KeyParameterValue.integer(vendorPatch)))
-    }
-    val bootPatch = AndroidDeviceUtils.getBootPatchLevelLong(callingUid)
-    if (bootPatch != AndroidDeviceUtils.DO_NOT_REPORT) {
-        authList.add(createAuth(Tag.BOOT_PATCHLEVEL, KeyParameterValue.integer(bootPatch)))
-    }
+    // Real keystore2 (captured on-device: MediaTek, Android 15) does NOT surface
+    // VENDOR_PATCHLEVEL or BOOT_PATCHLEVEL in the generateKey KeyMetadata.authorizations
+    // — they exist only in the attestation extension. Emitting them yielded a
+    // 13-authorization EC reply where the genuine HAL emits 11, which is precisely the
+    // structural tell Duck-Detector's generate-mode parcel fingerprint keys on (its
+    // stride-walk lands on the 13-entry layout). Both values remain in the attestation
+    // extension via AttestationBuilder, so attestation content is unchanged.
 
     /**
      * Keystore-enforced authorizations (CREATION_DATETIME, ACTIVE_DATETIME,
@@ -1408,7 +1407,17 @@ private fun KeyMintAttestation.toAuthorizations(
         authList.add(createKeystoreAuth(Tag.UNLOCKED_DEVICE_REQUIRED, KeyParameterValue.boolValue(true)))
     }
 
-    authList.add(createKeystoreAuth(Tag.USER_ID, KeyParameterValue.integer(callingUid / 100000)))
+    // Captured real keystore2 tags USER_ID at SecurityLevel.SOFTWARE (0), even though
+    // CREATION_DATETIME above is KEYSTORE (100). Mirror that split exactly.
+    authList.add(
+        Authorization().apply {
+            this.keyParameter = KeyParameter().apply {
+                this.tag = Tag.USER_ID
+                this.value = KeyParameterValue.integer(callingUid / 100000)
+            }
+            this.securityLevel = SecurityLevel.SOFTWARE
+        },
+    )
 
     return authList.toTypedArray()
 }
